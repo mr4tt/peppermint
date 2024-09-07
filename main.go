@@ -83,7 +83,7 @@ func getTransactions(accessToken string, client *http.Client) []Transaction {
 }
 
 func main() {
-	// load secets from .env
+	// load secrets from .env
 	if err := godotenv.Load(".env"); err != nil {
 		fmt.Println("Error loading .env:", err)
 		return
@@ -140,21 +140,21 @@ func main() {
 }
 
 func Routes() chi.Router {
-    r := chi.NewRouter()
+	r := chi.NewRouter()
 
-    handler := Handler{}
+	handler := Handler{}
 
 	// to use this, go to localhost:3000/api/{id}/moneyLeft
-    r.Get("/{id}/moneyLeft", handler.GetRemainingMoney)
+	r.Get("/{id}/moneyLeft", handler.GetRemainingMoney)
 	r.Get("/{id}/transactions", handler.GetTransactions)
 	r.Get("/{id}/categories", handler.GetCategories)
 
-    r.Post("/{id}/saveInfo", handler.SaveUserInfo)
-    r.Post("/{id}/editTransaction", handler.EditTransaction)
-    r.Post("/{id}/addTransaction", handler.AddTransaction)
-    r.Post("/{id}/newCategory", handler.SaveNewCategory)
-	
-    r.Delete("/{id}/transaction", handler.DeleteTransaction)
+	r.Post("/{id}/saveInfo", handler.SaveUserInfo)
+	r.Post("/{id}/editTransaction", handler.EditTransaction)
+	r.Post("/{id}/addTransaction", handler.AddTransaction)
+	r.Post("/{id}/newCategory", handler.SaveNewCategory)
+
+	r.Delete("/{id}/transaction", handler.DeleteTransaction)
 	r.Delete("/{id}/category", handler.DeleteCategory)
 
 	return r
