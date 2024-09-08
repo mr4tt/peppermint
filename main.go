@@ -13,8 +13,24 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var (
+	TClient = func(certFile string, keyFile string) *http.Client {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			fmt.Println("Error loading certificates:", err)
+			return nil
+		}
+
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
+		transport := &http.Transport{TLSClientConfig: tlsConfig}
+		return &http.Client{Transport: transport}
+	}("certs/certificate.pem", "certs/private_key.pem")
+)
+
 // make a GET request, given auth, url to request, and a client (for certs)
-func getReq(url string, accessToken string, client *http.Client) []byte {
+func getReq(url string, accessToken string) []byte {
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		fmt.Println("Error creating new HTTP request:", err)
@@ -24,7 +40,7 @@ func getReq(url string, accessToken string, client *http.Client) []byte {
 	request.SetBasicAuth(accessToken, "")
 
 	// make the http request
-	response, err := client.Do(request)
+	response, err := TClient.Do(request)
 	if err != nil {
 		fmt.Println("Error making request:", err)
 		return nil
@@ -41,21 +57,21 @@ func getReq(url string, accessToken string, client *http.Client) []byte {
 }
 
 // get account info from a TC (teller connect) code, then use to get transactions
-func getTransactions(accessToken string, client *http.Client) []Transaction {
+func getTransactions(accessToken string) []Transaction {
 	url := "https://api.teller.io/accounts"
 
-	accounts := getReq(url, accessToken, client) 
+	accounts := getReq(url, accessToken)
 
 	var accInfo []CapitalOneResp
 
 	// convert response from list of json into list of CapitalOneResp type
-	err := json.Unmarshal([]byte(accounts), &accInfo) 
+	err := json.Unmarshal([]byte(accounts), &accInfo)
 	if err != nil {
 		fmt.Println("Error unmarshalling:", err)
 		return nil
 	}
 
-	var transactions []Transaction 
+	var allTransactions []Transaction
 
 	// subtypes of accounts are
 	// depository:
@@ -63,23 +79,36 @@ func getTransactions(accessToken string, client *http.Client) []Transaction {
 	// credit:
 	// credit_card
 
-	// maybe we should ignore everything except checking and credit card 
-
-	// for each account found, get the transactions from it and 
+	// for each account found, get the transactions from it and
 	// convert to Transaction type
 	for _, account := range accInfo {
+		if account.Subtype != "checking" && account.Subtype != "credit_card" {
+			continue
+		}
+
 		fmt.Println("ID:", account.ID)
 		fmt.Println("Name:", account.Name)
 
-		accTransaction := getReq(account.Links.Transactions, accessToken, client)
-		err = json.Unmarshal((accTransaction), &transactions) 
+		// Get all transactions associated with this account
+		var parsedTransactions []Transaction
+		rawTransactions := getReq(account.Links.Transactions, accessToken)
+		err = json.Unmarshal((rawTransactions), &parsedTransactions)
 		if err != nil {
 			fmt.Println("Error unmarshalling transactions:", err)
 			return nil
 		}
+
+		for _, transaction := range parsedTransactions {
+			// We only want to process posted transactions
+			if transaction.Status != "posted" {
+				continue
+			}
+
+			allTransactions = append(allTransactions, transaction)
+		}
 	}
 
-	return transactions
+	return allTransactions
 }
 
 func main() {
@@ -88,31 +117,10 @@ func main() {
 		fmt.Println("Error loading .env:", err)
 		return
 	}
-	
+
 	// set up auth to Teller API (SSL certs and access token)
-	certFile := "certs/certificate.pem"
-	keyFile := "certs/private_key.pem"
+
 	accessToken := os.Getenv("ACCESS_TOKEN")
-
-	getClient := func(certFile string, keyFile string) *http.Client {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			fmt.Println("Error loading certificates:", err)
-			return nil
-		}
-	
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		}
-		transport := &http.Transport{TLSClientConfig: tlsConfig}
-		return &http.Client{Transport: transport}
-	}
-
-	// this should be a singleton but singleton in go looks scary and none of those words are in cse 11
-	client := getClient(certFile, keyFile)
-
-	// need to figure out logging at some pt lol
-
 	// --------------------------------
 
 	r := chi.NewRouter()
@@ -122,7 +130,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	transactions := getTransactions(accessToken, client)
+	transactions := getTransactions(accessToken)
 
 	r.Get("/transactions", func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(transactions); err != nil {
@@ -134,9 +142,8 @@ func main() {
 	// mounts paths from Routes() and needs them to start with /api
 	r.Mount("/api", Routes())
 
-	fmt.Println("http://localhost:3000/transactions") 	
 	http.ListenAndServe(":3000", r)
-	
+
 }
 
 func Routes() chi.Router {
@@ -146,7 +153,8 @@ func Routes() chi.Router {
 
 	// to use this, go to localhost:3000/api/{id}/moneyLeft
 	r.Get("/{id}/moneyLeft", handler.GetRemainingMoney)
-	r.Get("/{id}/transactions", handler.GetTransactions)
+	r.Get("/{id}/tellerTransactions", handler.GetNewTransactionsFromTeller)
+	r.Get("/{id}/dbTransactions", handler.GetTransactionsFromDB)
 	r.Get("/{id}/categories", handler.GetCategories)
 
 	r.Post("/{id}/saveInfo", handler.SaveUserInfo)
