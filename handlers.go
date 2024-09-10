@@ -51,7 +51,8 @@ type RecurringCost struct {
 }
 
 type CategoryInfo struct {
-	
+	Name    string `json:"name"`
+	Limit   float64 `json:"limit"`
 }
 
 // saves user information 
@@ -129,20 +130,20 @@ func (b Handler) SaveOneTimeCost(w http.ResponseWriter, r *http.Request) {
 func (b Handler) SaveCategories(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var userCosts []OneTimeCost
-	if err := json.NewDecoder(r.Body).Decode(&userCosts); err != nil {
+	var userCategories []CategoryInfo
+	if err := json.NewDecoder(r.Body).Decode(&userCategories); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
 	}
 
-	oneTimeCostQuery := `
-	INSERT INTO OneTimeCosts (user_id, name, amount, month, year)
-	VALUES (?, ?, ?, ?, ?)
+	categoryQuery := `
+	INSERT INTO SavedCategories (user_id, category_name, limit)
+	VALUES (?, ?, ?)
 	`
 
-	for _, oneTimeCost := range userCosts { 
-		_, err := b.DBPool.Exec(context.Background(), oneTimeCostQuery, 
-		id, oneTimeCost.Name, oneTimeCost.Amount, oneTimeCost.Month, oneTimeCost.Year)
+	for _, category := range userCategories { 
+		_, err := b.DBPool.Exec(context.Background(), categoryQuery, 
+		id, category.Name, category.Limit)
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
