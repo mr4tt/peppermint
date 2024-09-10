@@ -123,6 +123,8 @@ func main() {
 	accessToken := os.Getenv("ACCESS_TOKEN")
 	// --------------------------------
 
+	defer Pool.Close()
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -149,7 +151,7 @@ func main() {
 func Routes() chi.Router {
 	r := chi.NewRouter()
 
-	handler := Handler{}
+	handler := Handler{DBPool: Pool}
 
 	// to use this, go to localhost:3000/api/{id}/moneyLeft
 	r.Get("/{id}/moneyLeft", handler.GetRemainingMoney)
@@ -157,7 +159,11 @@ func Routes() chi.Router {
 	r.Get("/{id}/dbTransactions", handler.GetTransactionsFromDB)
 	r.Get("/{id}/categories", handler.GetCategories)
 
-	r.Post("/{id}/saveInfo", handler.SaveUserInfo)
+	r.Post("/{id}/saveInfo", handler.SaveSalaryInfo)
+	r.Post("/{id}/saveInfo", handler.SaveOneTimeCost)
+	r.Post("/{id}/saveInfo", handler.SaveRecurringCostInfo)
+	r.Post("/{id}/saveInfo", handler.SaveRecurringCostInfo)
+	
 	r.Post("/{id}/editTransaction", handler.EditTransaction)
 	r.Post("/{id}/addTransaction", handler.AddTransaction)
 	r.Post("/{id}/newCategory", handler.SaveNewCategory)
