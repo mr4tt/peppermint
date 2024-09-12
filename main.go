@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
@@ -123,8 +125,6 @@ func main() {
 	accessToken := os.Getenv("ACCESS_TOKEN")
 	// --------------------------------
 
-	defer Pool.Close()
-
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -144,29 +144,41 @@ func main() {
 	// mounts paths from Routes() and needs them to start with /api
 	r.Mount("/api", Routes())
 
-	http.ListenAndServe(":3000", r)
+	http.ListenAndServe("localhost:3000", r)
 
 }
 
 func Routes() chi.Router {
 	r := chi.NewRouter()
 
-	handler := Handler{DBPool: Pool}
+	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+	fmt.Println(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to create connection pool: %v\n", err)
+	}
 
-	// to use this, go to localhost:3000/api/{id}/moneyLeft
-	r.Get("/{id}/moneyLeft", handler.GetRemainingMoney)
-	r.Get("/{id}/tellerTransactions", handler.GetNewTransactionsFromTeller)
+	handler := Handler{DBPool: pool}
+
+	defer pool.Close()
+
+	// to use this, go to localhost:3000/api/...
+	r.Post("/newAccount", handler.SaveUser)
+
+	r.Get("/{id}/remainingMoney", handler.GetRemainingMoney)
+	r.Get("/{id}/updateTransactions", handler.GetNewTransactionsFromTeller)
 	r.Get("/{id}/dbTransactions", handler.GetTransactionsFromDB)
 	r.Get("/{id}/categories", handler.GetCategories)
 
-	r.Post("/{id}/saveInfo", handler.SaveSalaryInfo)
-	r.Post("/{id}/saveInfo", handler.SaveOneTimeCost)
-	r.Post("/{id}/saveInfo", handler.SaveRecurringCostInfo)
-	r.Post("/{id}/saveInfo", handler.SaveRecurringCostInfo)
-	
+	r.Post("/{id}/saveSalInfo", handler.SaveSalaryInfo)
+	r.Post("/{id}/saveRecurringCosts", handler.SaveRecurringCostInfo)
+	r.Post("/{id}/saveOneTimeCost", handler.SaveOneTimeCost)
+	r.Post("/{id}/newCategory", handler.SaveCategories)
+
 	r.Post("/{id}/editTransaction", handler.EditTransaction)
 	r.Post("/{id}/addTransaction", handler.AddTransaction)
-	r.Post("/{id}/newCategory", handler.SaveNewCategory)
+
+	r.Post("/{id}/editOneTimeCost", handler.EditOneTimeCost)
+	r.Post("/{id}/editRecurringCost", handler.EditRecurringCost)
 
 	r.Delete("/{id}/transaction", handler.DeleteTransaction)
 	r.Delete("/{id}/category", handler.DeleteCategory)
