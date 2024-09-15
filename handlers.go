@@ -9,44 +9,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mr4tt/peppermint/models"
 )
 
 type Handler struct {
 	DBPool *pgxpool.Pool
 }
 
-type User struct {
-    Username string `json:"username"`
-    Password string `json:"pw"`
-}
-
-type SalaryInfo struct {
-    K401      float64 `json:"contribution_401k"`
-    Insurance float64 `json:"total_insurance_amount"`
-    PostTaxSal float64 `json:"monthly_posttax_salary"`
-}
-
-type RecurringCost struct {
-    Name      string  `json:"name"`
-    Amount    float64 `json:"amount"`
-    Frequency int64   `json:"frequency"`
-    IsSavings bool    `json:"is_savings"`
-}
-
-type OneTimeCost struct {
-    Name   string `json:"name"`
-    Amount int64  `json:"amount"`
-    Month  int    `json:"month"`
-    Year   int    `json:"year"`
-}
-
-type CategoryInfo struct {
-	Name    string `json:"name"`
-	Limit   float64 `json:"category_limit"`
-}
-
-func (b Handler) SaveUser(w http.ResponseWriter, r *http.Request)    {
-	var userInfo User
+func (b Handler) SaveUser(w http.ResponseWriter, r *http.Request) {
+	var userInfo models.User
 	if err := json.NewDecoder(r.Body).Decode(&userInfo); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
@@ -68,10 +39,10 @@ func (b Handler) SaveUser(w http.ResponseWriter, r *http.Request)    {
 	}
 }
 
-func (b Handler) SaveSalaryInfo(w http.ResponseWriter, r *http.Request)    {
+func (b Handler) SaveSalaryInfo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var userInfo SalaryInfo
+	var userInfo models.SalaryInfo
 	if err := json.NewDecoder(r.Body).Decode(&userInfo); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
@@ -84,10 +55,10 @@ func (b Handler) SaveSalaryInfo(w http.ResponseWriter, r *http.Request)    {
 	VALUES (@uid, @k401, @insurance, @salary)`
 
 	args := pgx.NamedArgs{
-		"uid": id,
-		"k401": userInfo.K401,
+		"uid":       id,
+		"k401":      userInfo.K401,
 		"insurance": userInfo.Insurance,
-		"salary": userInfo.PostTaxSal,
+		"salary":    userInfo.PostTaxSal,
 	}
 
 	_, err := b.DBPool.Exec(context.Background(), salaryInfoQuery, args)
@@ -100,7 +71,7 @@ func (b Handler) SaveSalaryInfo(w http.ResponseWriter, r *http.Request)    {
 func (b Handler) SaveRecurringCostInfo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var recurringCosts []RecurringCost
+	var recurringCosts []models.RecurringCost
 	if err := json.NewDecoder(r.Body).Decode(&recurringCosts); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
@@ -111,12 +82,12 @@ func (b Handler) SaveRecurringCostInfo(w http.ResponseWriter, r *http.Request) {
 	VALUES (@uid, @name, @amt, @freq, @isSavings)
 	`
 
-	for _, userCosts := range recurringCosts { 
+	for _, userCosts := range recurringCosts {
 		args := pgx.NamedArgs{
-			"uid": id,
-			"name": userCosts.Name,
-			"amt": userCosts.Amount,
-			"freq": userCosts.Frequency,
+			"uid":       id,
+			"name":      userCosts.Name,
+			"amt":       userCosts.Amount,
+			"freq":      userCosts.Frequency,
 			"isSavings": userCosts.IsSavings,
 		}
 		_, err := b.DBPool.Exec(context.Background(), recurringCostQuery, args)
@@ -131,7 +102,7 @@ func (b Handler) SaveRecurringCostInfo(w http.ResponseWriter, r *http.Request) {
 func (b Handler) SaveOneTimeCost(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var userCosts []OneTimeCost
+	var userCosts []models.OneTimeCost
 	if err := json.NewDecoder(r.Body).Decode(&userCosts); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
@@ -144,13 +115,13 @@ func (b Handler) SaveOneTimeCost(w http.ResponseWriter, r *http.Request) {
 	VALUES (@uid, @name, @amt, @month, @year)
 	`
 
-	for _, oneTimeCost := range userCosts { 
+	for _, oneTimeCost := range userCosts {
 		args := pgx.NamedArgs{
-			"uid": id,
-			"name": oneTimeCost.Name,
-			"amt": oneTimeCost.Amount,
+			"uid":   id,
+			"name":  oneTimeCost.Name,
+			"amt":   oneTimeCost.Amount,
 			"month": oneTimeCost.Month,
-			"year": oneTimeCost.Year,
+			"year":  oneTimeCost.Year,
 		}
 
 		_, err := b.DBPool.Exec(context.Background(), oneTimeCostQuery, args)
@@ -165,8 +136,8 @@ func (b Handler) SaveOneTimeCost(w http.ResponseWriter, r *http.Request) {
 func (b Handler) SaveCategories(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var userCategories []CategoryInfo
-	if err := json.NewDecoder(r.Body).Decode(&userCategories); err != nil {	
+	var userCategories []models.CategoryInfo
+	if err := json.NewDecoder(r.Body).Decode(&userCategories); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
 	}
@@ -176,12 +147,12 @@ func (b Handler) SaveCategories(w http.ResponseWriter, r *http.Request) {
 	categoryQuery := `INSERT INTO saved_categories (user_id, category_name, category_limit) 
 	VALUES (@uid, @name, @lim)`
 
-	for _, category := range userCategories { 
+	for _, category := range userCategories {
 		args := pgx.NamedArgs{
-			"uid": id,
+			"uid":  id,
 			"name": category.Name,
-			"lim": category.Limit,
-		  }
+			"lim":  category.Limit,
+		}
 
 		_, err := b.DBPool.Exec(context.Background(), categoryQuery, args)
 
@@ -196,12 +167,12 @@ func (b Handler) AddTransaction(w http.ResponseWriter, r *http.Request)  {}
 func (b Handler) EditTransaction(w http.ResponseWriter, r *http.Request) {}
 
 // for updating costs where name / amount / whatever needs to change
-func (b Handler) EditOneTimeCost(w http.ResponseWriter, r *http.Request) {}
+func (b Handler) EditOneTimeCost(w http.ResponseWriter, r *http.Request)   {}
 func (b Handler) EditRecurringCost(w http.ResponseWriter, r *http.Request) {}
 
 func (b Handler) GetRemainingMoney(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	
+
 	w.Write([]byte(id))
 }
 

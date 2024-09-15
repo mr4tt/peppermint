@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/mr4tt/peppermint/models"
 )
 
 var (
@@ -59,12 +60,12 @@ func getReq(url string, accessToken string) []byte {
 }
 
 // get account info from a TC (teller connect) code, then use to get transactions
-func getTransactions(accessToken string) []Transaction {
+func getTransactions(accessToken string) []models.Transaction {
 	url := "https://api.teller.io/accounts"
 
 	accounts := getReq(url, accessToken)
 
-	var accInfo []CapitalOneResp
+	var accInfo []models.CapitalOneResp
 
 	// convert response from list of json into list of CapitalOneResp type
 	err := json.Unmarshal([]byte(accounts), &accInfo)
@@ -73,7 +74,7 @@ func getTransactions(accessToken string) []Transaction {
 		return nil
 	}
 
-	var allTransactions []Transaction
+	var allTransactions []models.Transaction
 
 	// subtypes of accounts are
 	// depository:
@@ -92,7 +93,7 @@ func getTransactions(accessToken string) []Transaction {
 		fmt.Println("Name:", account.Name)
 
 		// Get all transactions associated with this account
-		var parsedTransactions []Transaction
+		var parsedTransactions []models.Transaction
 		rawTransactions := getReq(account.Links.Transactions, accessToken)
 		err = json.Unmarshal((rawTransactions), &parsedTransactions)
 		if err != nil {
