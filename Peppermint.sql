@@ -1,7 +1,8 @@
 CREATE TABLE users (
-  "user_id" SERIAL UNIQUE PRIMARY KEY NOT NULL,
-  "username" VARCHAR(64) NOT NULL,
-  "pw_hash" VARCHAR(1024) NOT NULL
+  "user_id" SERIAL UNIQUE NOT NULL,
+  "username" VARCHAR(64) UNIQUE NOT NULL,
+  "pw_hash" VARCHAR(1024) NOT NULL,
+  PRIMARY KEY ("user_id", "username")
 );
 
 CREATE TABLE transactions (
