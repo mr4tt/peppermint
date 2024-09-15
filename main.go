@@ -143,9 +143,7 @@ func main() {
 
 	// mounts paths from Routes() and needs them to start with /api
 	r.Mount("/api", Routes())
-
 	http.ListenAndServe("localhost:3000", r)
-
 }
 
 func Routes() chi.Router {
@@ -158,8 +156,6 @@ func Routes() chi.Router {
 	}
 
 	handler := Handler{DBPool: pool}
-
-	defer pool.Close()
 
 	// to use this, go to localhost:3000/api/...
 	r.Post("/newAccount", handler.SaveUser)
