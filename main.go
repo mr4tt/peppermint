@@ -160,6 +160,7 @@ func Routes() chi.Router {
 
 	// to use this, go to localhost:3000/api/...
 	r.Post("/newAccount", handler.SaveUser)
+	r.Get("/check/{username}", handler.CheckIfUsernameExists)
 
 	r.Get("/{id}/remainingMoney", handler.GetRemainingMoney)
 	r.Get("/{id}/updateTransactions", handler.GetNewTransactionsFromTeller)
