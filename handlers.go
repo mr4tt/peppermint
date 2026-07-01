@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -21,8 +24,53 @@ var (
 	Validator         = validator.New(validator.WithRequiredStructEnabled())
 )
 
+// load in Teller certs
+var (
+	TClient = func(certFile string, keyFile string) *http.Client {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			fmt.Println("Error loading certificates:", err)
+			return nil
+		}
+
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
+		transport := &http.Transport{TLSClientConfig: tlsConfig}
+		return &http.Client{Transport: transport}
+	}("certs/certificate.pem", "certs/private_key.pem")
+)
+
+// make a GET request to Teller, given auth, url to request, and a client (for certs)
+func getReq(url string, accessToken string) []byte {
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Println("Error creating new HTTP request:", err)
+		return nil
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.SetBasicAuth(accessToken, "")
+
+	// make the http request
+	response, err := TClient.Do(request)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return nil
+	}
+	defer response.Body.Close()
+
+	fullResponse, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
+		return nil
+	}
+
+	return fullResponse
+}
+
 type Handler struct {
 	DBPool *pgxpool.Pool
+	Token string
 }
 
 // Produces a map that can be used to return a JSON error response for invalid input.
@@ -272,8 +320,101 @@ func (b Handler) GetRemainingMoney(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(id))
 }
 
-func (b Handler) GetNewTransactionsFromTeller(w http.ResponseWriter, r *http.Request) {}
-func (b Handler) GetTransactionsFromDB(w http.ResponseWriter, r *http.Request)        {}
+func (b Handler) GetNewTransactionsFromTeller(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	accessToken := os.Getenv("ACCESS_TOKEN")
+
+	noTransactions := false
+
+	// get the latest transaction saved
+	lastPostedDate, err := func(id string) (string, error) {
+		getTransactionsQuery := `
+		SELECT posted_date FROM transactions 
+		WHERE user_id=@id 
+		ORDER BY posted_date DESC 
+		LIMIT 1`
+
+		args := pgx.NamedArgs{
+			"id":  id,
+		}
+	
+		var posted_date time.Time
+	
+		err := b.DBPool.QueryRow(context.Background(), getTransactionsQuery, args).Scan(&posted_date)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
+			return "", err
+		}
+		isoDateString := posted_date.Format("2006-01-02")
+		return isoDateString, nil
+	}(id)
+	
+	if errors.Is(err, pgx.ErrNoRows) {
+		noTransactions = true
+	}
+
+	fmt.Println("noTransaction value: ", noTransactions)
+	fmt.Println("lastPostedDate value: ", lastPostedDate)
+
+	var transactions []models.Transaction
+	
+	if !noTransactions {
+		accInfo := getAccounts(accessToken)
+		for _, account := range accInfo {
+			if account.Subtype != "checking" && account.Subtype != "credit_card" {
+				continue
+			}
+
+			url := fmt.Sprintf("https://api.teller.io/accounts/%s/transactions?start_date=%s", account.ID, lastPostedDate)
+			fmt.Println(url)
+
+			rawTransactions := getReq(url, accessToken)
+
+			// fmt.Println("rawTransactions: ", string(rawTransactions))
+
+			var parsedTransactions []models.Transaction
+			err = json.Unmarshal((rawTransactions), &parsedTransactions)
+			if err != nil {
+				fmt.Println("Error unmarshalling transactions:", err)
+				return
+			}
+
+			for _, transaction := range parsedTransactions {
+				// We only want to process posted transactions
+				if transaction.Status != "posted" {
+					continue
+				}
+
+				transactions = append(transactions, transaction)
+			}
+		}
+	} else {
+		transactions = getTransactions(accessToken)
+	}
+	
+	fmt.Println("transactions: ", transactions)
+
+
+	// args := pgx.NamedArgs{
+	// 	"uid":  id,
+	// 	"name": category.Name,
+	// 	"lim":  category.Limit,
+	// }
+
+	// insertQuery := `
+	// INSERT INTO my_table (data)
+	// VALUES ('[
+    // {"name": "Alice", "age": 30},
+    // {"name": "Bob", "age": 25},
+    // {"name": "Charlie", "age": 35}
+	// ]');` and on conflict, do nothing (because the dates mean we'll have txn dups)
+
+
+
+	// call teller to get everything after that id if there are previous transactions found
+	// unmarshall, save to db
+}
+func (b Handler) GetTransactionsFromDB(w http.ResponseWriter, r *http.Request) {}
 
 func (b Handler) GetCategories(w http.ResponseWriter, r *http.Request) {}
 

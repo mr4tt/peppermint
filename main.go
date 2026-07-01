@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 
@@ -13,106 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/mr4tt/peppermint/models"
 )
-
-var (
-	TClient = func(certFile string, keyFile string) *http.Client {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			fmt.Println("Error loading certificates:", err)
-			return nil
-		}
-
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		}
-		transport := &http.Transport{TLSClientConfig: tlsConfig}
-		return &http.Client{Transport: transport}
-	}("certs/certificate.pem", "certs/private_key.pem")
-)
-
-// make a GET request, given auth, url to request, and a client (for certs)
-func getReq(url string, accessToken string) []byte {
-	request, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		fmt.Println("Error creating new HTTP request:", err)
-		return nil
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.SetBasicAuth(accessToken, "")
-
-	// make the http request
-	response, err := TClient.Do(request)
-	if err != nil {
-		fmt.Println("Error making request:", err)
-		return nil
-	}
-	defer response.Body.Close()
-
-	fullResponse, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println("Error reading response body:", err)
-		return nil
-	}
-
-	return fullResponse
-}
-
-// get account info from a TC (teller connect) code, then use to get transactions
-func getTransactions(accessToken string) []models.Transaction {
-	url := "https://api.teller.io/accounts"
-
-	accounts := getReq(url, accessToken)
-
-	var accInfo []models.CapitalOneResp
-
-	// convert response from list of json into list of CapitalOneResp type
-	err := json.Unmarshal([]byte(accounts), &accInfo)
-	if err != nil {
-		fmt.Println("Error unmarshalling:", err)
-		return nil
-	}
-
-	var allTransactions []models.Transaction
-
-	// subtypes of accounts are
-	// depository:
-	// checking, savings, money_market, certificate_of_deposit, treasury, sweep
-	// credit:
-	// credit_card
-
-	// for each account found, get the transactions from it and
-	// convert to Transaction type
-	for _, account := range accInfo {
-		if account.Subtype != "checking" && account.Subtype != "credit_card" {
-			continue
-		}
-
-		fmt.Println("ID:", account.ID)
-		fmt.Println("Name:", account.Name)
-
-		// Get all transactions associated with this account
-		var parsedTransactions []models.Transaction
-		rawTransactions := getReq(account.Links.Transactions, accessToken)
-		err = json.Unmarshal((rawTransactions), &parsedTransactions)
-		if err != nil {
-			fmt.Println("Error unmarshalling transactions:", err)
-			return nil
-		}
-
-		for _, transaction := range parsedTransactions {
-			// We only want to process posted transactions
-			if transaction.Status != "posted" {
-				continue
-			}
-
-			allTransactions = append(allTransactions, transaction)
-		}
-	}
-
-	return allTransactions
-}
 
 func main() {
 	// load secrets from .env
@@ -151,12 +50,12 @@ func Routes() chi.Router {
 	r := chi.NewRouter()
 
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
-	fmt.Println(os.Getenv("DATABASE_URL"))
+	fmt.Println("database url", os.Getenv("DATABASE_URL"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to create connection pool: %v\n", err)
 	}
 
-	handler := Handler{DBPool: pool}
+	handler := Handler{DBPool: pool, Token: os.Getenv("ACCESS_TOKEN")}
 
 	// to use this, go to localhost:3000/api/...
 	r.Post("/newAccount", handler.SaveUser)

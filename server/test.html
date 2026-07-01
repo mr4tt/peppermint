@@ -12,10 +12,7 @@
       // Part 2. Initialize & configure the client library
       document.addEventListener("DOMContentLoaded", function() {
         var tellerConnect = TellerConnect.setup({
-          applicationId: "REALLY COOL APP ID", // Your Teller application ID
-          environment: "development",
-          // Teller's products that you would like to use, e.g. "verify"
-          products: ["transactions"],
+          applicationId: "COOL APP ID",
           onInit: function() {
             console.log("Teller Connect has initialized");
           },
@@ -25,7 +22,7 @@
           },
           onExit: function() {
             console.log("User closed Teller Connect");
-          },
+          }
         });
 
         // Part 4. Hook user actions to start Teller Connect

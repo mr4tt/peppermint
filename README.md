@@ -15,6 +15,7 @@ We assume you have created a [Teller](https://teller.io/) account.
 3. Edit `test.html` to include your application id from your Teller dashboard (line 15).
 
 4. Run `test.html` in a browser and connect a bank account with Teller. Your access code will be logged in console.
+   - currently not working for me lol idk why
 
 5. `touch .env`
 
@@ -30,5 +31,5 @@ We assume you have created a [Teller](https://teller.io/) account.
 
    - installs necessary dependencies
 
-8. `go run main.go`
+8. `go run .`
    - this will show transactions in JSON at http://localhost:3000/transactions
